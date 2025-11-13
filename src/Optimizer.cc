@@ -48,6 +48,7 @@
 #include "Tracking.h"
 #include "TagManager.h"
 #include "EdgeSE3Prior.h"
+#include "EdgeSim3Prior.h"
 
 
 namespace ORB_SLAM3
@@ -2727,6 +2728,75 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
         vpVertices[nIDi]=VSim3;
     }
 
+    // --- 新增：添加Tag观测作为先验约束 ---
+    auto& tagStorage = TagStorage::Instance();
+    for(const auto pKFi : vpKFs)
+    {
+        if(!pKFi || pKFi->isBad())
+            continue;
+
+        // 获取该关键帧的所有Tag观测
+        auto observations = tagStorage.GetObservationsForKF(pKFi->mnId);
+        if(observations.empty())
+            continue;
+
+        // 遍历该关键帧的所有Tag观测
+        for(const auto& obs_pair : observations)
+        {
+            int tagId = obs_pair.first;
+            const auto& obsVec = obs_pair.second;
+            if(obsVec.empty())
+                continue;
+            
+            // 使用第一次观测作为代表
+            const auto& obs = obsVec[0];
+
+            // 1. 获取Tag在世界坐标系下的先验位姿
+            Eigen::Matrix3d R_w_tag;
+            Eigen::Vector3d t_w_tag;
+            if(!tagStorage.tagRead(tagId, R_w_tag, t_w_tag))
+                continue; // 如果Tag位姿未知，则跳过
+
+            // 2. 获取观测到的 T_cam_tag (测量值)
+            Sophus::SE3f T_cam_tag_measured(obs.R_cam_tag.cast<float>(), obs.t_cam_tag.cast<float>());
+
+            // 3. 如果观测来自非主相机，转换到主相机(body)坐标系下
+            if (obs.camID == 1) {        // cam2 (Right)
+                T_cam_tag_measured = pKFi->GetRelativePoseTlr() * T_cam_tag_measured;
+            } else if (obs.camID == 2) { // cam3 (Side-Left)
+                T_cam_tag_measured = pKFi->GetRelativePoseTlsl() * T_cam_tag_measured;
+            } else if (obs.camID == 3) { // cam4 (Side-Right)
+                T_cam_tag_measured = pKFi->GetRelativePoseTlsr() * T_cam_tag_measured;
+            }
+
+            // 4. 计算期望的相机位姿 T_c_w
+            // T_c_w = T_c_tag * T_tag_w = T_c_tag * (T_w_tag)^-1
+            Sophus::SE3f T_w_tag_sophus(R_w_tag.cast<float>(), t_w_tag.cast<float>());
+            Sophus::SE3f T_c_w_expected = T_cam_tag_measured * T_w_tag_sophus.inverse();
+
+            // 5. 将SE3转换为Sim3（尺度为1）作为测量值
+            g2o::Sim3 g2oScw(T_c_w_expected.unit_quaternion().cast<double>(), T_c_w_expected.translation().cast<double>(), 1.0);
+
+            // 6. 创建 g2o 一元边 (Prior Edge)
+            // 注意：这里需要一个 g2o::EdgeSim3Prior，如果g2o中没有，需要自定义一个
+            // 假设我们有一个自定义的 EdgeSim3Prior
+            auto* e = new g2o::EdgeSim3Prior(); // 假设存在 EdgeSim3Prior
+            e->setVertex(0, optimizer.vertex(pKFi->mnId));
+            e->setMeasurement(g2oScw);
+
+            // 7. 设置信息矩阵 (权重)
+            int obsCount = tagStorage.GetObservationCount(tagId);
+            double weight = 1.0;
+            Eigen::Matrix<double,7,7> info = Eigen::Matrix<double,7,7>::Identity();
+            info.block<3,3>(0,0) *= 0.5 * weight; // 旋转权重
+            info.block<3,3>(3,3) *= 1.0 * weight; // 平移权重
+            info(6,6) = 1.0 * weight;             // 尺度权重 (约束尺度为1)
+            e->setInformation(info);
+
+            optimizer.addEdge(e);
+        }
+    }
+    // --- Tag约束添加结束 ---
 
     set<pair<long unsigned int,long unsigned int> > sInsertedEdges;
 
@@ -6810,6 +6880,77 @@ void Optimizer::OptimizeEssentialGraph4DoF(Map* pMap, KeyFrame* pLoopKF, KeyFram
         optimizer.addVertex(V4DoF);
         vpVertices[nIDi]=V4DoF;
     }
+
+    // // --- 新增：添加Tag观测作为先验约束 ---
+    // auto& tagStorage = TagStorage::Instance();
+    // for(const auto pKFi : vpKFs)
+    // {
+    //     if(!pKFi || pKFi->isBad())
+    //         continue;
+
+    //     // 获取该关键帧的所有Tag观测
+    //     auto observations = tagStorage.GetObservationsForKF(pKFi->mnId);
+    //     if(observations.empty())
+    //         continue;
+
+    //     // 遍历该关键帧的所有Tag观测
+    //     for(const auto& obs_pair : observations)
+    //     {
+    //         int tagId = obs_pair.first;
+    //         const auto& obsVec = obs_pair.second;
+    //         if(obsVec.empty())
+    //             continue;
+            
+    //         // 使用第一次观测作为代表
+    //         const auto& obs = obsVec[0];
+
+    //         // 1. 获取Tag在世界坐标系下的先验位姿
+    //         Eigen::Matrix3d R_w_tag;
+    //         Eigen::Vector3d t_w_tag;
+    //         if(!tagStorage.tagRead(tagId, R_w_tag, t_w_tag))
+    //             continue; // 如果Tag位姿未知，则跳过
+
+    //         // 2. 获取观测到的 T_cam_tag (测量值)
+    //         Sophus::SE3f T_cam_tag_measured(obs.R_cam_tag.cast<float>(), obs.t_cam_tag.cast<float>());
+
+    //         // 3. 如果观测来自非主相机，转换到主相机(body)坐标系下
+    //         if (obs.camID == 1) {        // cam2 (Right)
+    //             T_cam_tag_measured = pKFi->GetRelativePoseTlr() * T_cam_tag_measured;
+    //         } else if (obs.camID == 2) { // cam3 (Side-Left)
+    //             T_cam_tag_measured = pKFi->GetRelativePoseTlsl() * T_cam_tag_measured;
+    //         } else if (obs.camID == 3) { // cam4 (Side-Right)
+    //             T_cam_tag_measured = pKFi->GetRelativePoseTlsr() * T_cam_tag_measured;
+    //         }
+
+    //         // 4. 计算期望的相机位姿 T_c_w
+    //         // T_c_w = T_c_tag * T_tag_w = T_c_tag * (T_w_tag)^-1
+    //         Sophus::SE3f T_w_tag_sophus(R_w_tag.cast<float>(), t_w_tag.cast<float>());
+    //         Sophus::SE3f T_c_w_expected = T_cam_tag_measured * T_w_tag_sophus.inverse();
+
+    //         // 5. 将SE3转换为Sim3（尺度为1）作为测量值
+    //         g2o::Sim3 g2oScw(T_c_w_expected.unit_quaternion().cast<double>(), T_c_w_expected.translation().cast<double>(), 1.0);
+
+    //         // 6. 创建 g2o 一元边 (Prior Edge)
+    //         // 注意：这里需要一个 g2o::EdgeSim3Prior，如果g2o中没有，需要自定义一个
+    //         // 假设我们有一个自定义的 EdgeSim3Prior
+    //         auto* e = new g2o::EdgeSim3Prior(); // 假设存在 EdgeSim3Prior
+    //         e->setVertex(0, optimizer.vertex(pKFi->mnId));
+    //         e->setMeasurement(g2oScw);
+
+    //         // 7. 设置信息矩阵 (权重)
+    //         int obsCount = tagStorage.GetObservationCount(tagId);
+    //         double weight = 1.0;
+    //         Eigen::Matrix<double,7,7> info = Eigen::Matrix<double,7,7>::Identity();
+    //         info.block<3,3>(0,0) *= 0.5 * weight; // 旋转权重
+    //         info.block<3,3>(3,3) *= 1.0 * weight; // 平移权重
+    //         info(6,6) = 1.0 * weight;             // 尺度权重 (约束尺度为1)
+    //         e->setInformation(info);
+
+    //         optimizer.addEdge(e);
+    //     }
+    // }
+    // // --- Tag约束添加结束 ---
+
     set<pair<long unsigned int,long unsigned int> > sInsertedEdges;
 
     // Edge used in posegraph has still 6Dof, even if updates of camera poses are just in 4DoF

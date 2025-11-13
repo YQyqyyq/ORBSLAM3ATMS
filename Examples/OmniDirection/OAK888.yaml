@@ -172,7 +172,7 @@ Viewer.imageViewScale: 0.8
 # Map Parameters
 #--------------------------------------------------------------------------------------------
 # If the LoadFile doesn't exist, the system give a message and create a new Atlas from scratch
-System.LoadAtlasFromFile: "OAKflyme_map"
+# System.LoadAtlasFromFile: "OAKflyme_map"
 #
 # The store file is created from the current session, if a file with the same name exists it is deleted
 # System.SaveAtlasToFile: "OAKflyme_map"
@@ -182,4 +182,4 @@ System.LoadAtlasFromFile: "OAKflyme_map"
 #--------------------------------------------------------------------------------------------
 # Activate Localization-Only mode automatically after a loop closure merge.
 # 1: true, 0: false.
-System.ActivateLocalizationAfterMerge: 1
+System.ActivateLocalizationAfterMerge: 0

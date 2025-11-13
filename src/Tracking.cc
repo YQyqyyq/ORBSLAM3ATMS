@@ -2104,9 +2104,11 @@ void Tracking::Track()
                 CheckReplacedInLastFrame();
 
                 // 优先尝试Tag跟踪
+                std::set<int> detectedTagID0;
+                mpMapDrawer->SetCurrentDetectedTags(detectedTagID0);
                 bOK = TrackWithTag();
-                if(bOK)
-                   std::cout << "[Tag] Using TrackingWithTag " << endl;
+                // if(bOK)
+                //    std::cout << "[Tag] Using TrackingWithTag " << endl;
                 // --------------
                 
                 if(!bOK){
@@ -2222,6 +2224,8 @@ void Tracking::Track()
             else
             {
             // 优先尝试Tag跟踪(仅定位模式)(可增加仅根据Tag计算位姿)
+            std::set<int> detectedTagID0;
+            mpMapDrawer->SetCurrentDetectedTags(detectedTagID0);
             bOK = TrackWithTag();
             if(bOK)
                 std::cout << "[Tag] Using TrackingWithTag (OnlyTracking)" << endl;
@@ -3278,6 +3282,8 @@ bool Tracking::TrackWithTag()
         return false;
     }
 
+    std::set<int> detectedTagIDs;
+
     ORBmatcher matcher(0.9, true);
 
     // 处理有效Tag做位姿平均
@@ -3306,6 +3312,8 @@ bool Tracking::TrackWithTag()
         if (observationCount > 6)
             observationCount = 6; //一视同仁
 
+        detectedTagIDs.insert(tag.id);
+
         // 计算相机位姿
         Sophus::SE3f T_world_tag(
             R_w_tag.cast<float>(), 
@@ -3327,6 +3335,7 @@ bool Tracking::TrackWithTag()
         weights.push_back(static_cast<float>(observationCount));
         totalWeight += static_cast<float>(observationCount);
     }
+    mpMapDrawer->SetCurrentDetectedTags(detectedTagIDs);
 
     if(vValidPoses.empty()) 
         return false;

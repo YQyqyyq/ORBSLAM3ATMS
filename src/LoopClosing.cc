@@ -459,6 +459,7 @@ void LoopClosing::Run()
                             if(mbForceMergeAfterLoad)//zyq
                             {
                                 cout << "Force-Merge successful. Flag reset." << endl;
+                                mpCurrentKF->SetBadFlag();
                                 mbForceMergeAfterLoad = false;
                             }
 

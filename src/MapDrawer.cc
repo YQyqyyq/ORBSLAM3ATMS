@@ -402,10 +402,16 @@ void MapDrawer::DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph, const b
     }
 }
 
+void MapDrawer::SetCurrentDetectedTags(const std::set<int>& ids)
+{
+    std::unique_lock<std::mutex> lock(mMutexTags);
+    mCurrentDetectedTagIDs = ids;
+}
+
 void MapDrawer::DrawTags(bool bDrawTags, int maxTagId) {
     if (!bDrawTags) return;
 
-    const float &size = mTagSize; // 整体尺寸
+    const float &size = mTagSize;       // 整体尺寸
     const float thickness = size * 0.1; // 薄板厚度
 
     for (int id = 1; id <= maxTagId; id++) {
@@ -420,8 +426,18 @@ void MapDrawer::DrawTags(bool bDrawTags, int maxTagId) {
             glPushMatrix();
             glMultMatrixf((GLfloat*)Twc.data());
 
+            // 检查当前Tag是否被检测到
+            bool isDetected = mCurrentDetectedTagIDs.count(id);
+
             // 薄板正面（红色半透明）
-            glColor4f(1.0f, 0.0f, 0.0f, 0.7f);
+            if (isDetected) {
+                // 被检测到的Tag用绿色显示
+                glColor4f(1.0f, 0.5f, 0.1f, 0.7f); // 正面
+            } else {
+                // 未被检测到的Tag用红色显示
+                glColor4f(1.0f, 0.0f, 0.0f, 0.7f); // 正面
+            }
+            // glColor4f(1.0f, 0.0f, 0.0f, 0.7f);
             glBegin(GL_QUADS);
                 glVertex3f(-size, -size, thickness);
                 glVertex3f(size, -size, thickness);

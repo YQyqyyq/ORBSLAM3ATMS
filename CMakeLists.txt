@@ -120,7 +120,8 @@ include/Config.h
 include/Settings.h
 include/TagManager.h
 include/P2Fconverter.h
-include/EdgeSE3Prior.h)
+include/EdgeSE3Prior.h
+include/EdgeSim3Prior.h)
 
 add_subdirectory(Thirdparty/g2o)
 

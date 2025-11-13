@@ -1,0 +1,1 @@
+./Examples/OmniDirection/omni ./Vocabulary/ORBvoc.txt ./Examples/OmniDirection/OAK888.yaml /home/wk/OAKflyme/ /home/wk/OAKflyme/timestamp_mid.txt

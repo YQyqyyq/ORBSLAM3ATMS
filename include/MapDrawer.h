@@ -57,10 +57,13 @@ public:
     void GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M, pangolin::OpenGlMatrix &MOw);
     void DrawTags(bool bDrawTags, int maxTagId); // 新增函数
     void SetTagSize(float size) { mTagSize = size; } // 可选：设置Tag显示大小
+    void SetCurrentDetectedTags(const std::set<int>& ids);
 
 private:
 
     float mTagSize = 0.15;
+    std::set<int> mCurrentDetectedTagIDs;
+    std::mutex mMutexTags;
 
     bool ParseViewerParamFile(cv::FileStorage &fSettings);
 
